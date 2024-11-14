@@ -13,7 +13,7 @@ from pacientesBD import * #Importamos pacientes, donde se crea la base de datos
 #Instanciar el bot
 bot = telebot.TeleBot("7734067796:AAF_2wvdRTR9KQi6jYPOcf-PKyYfSx6eyGk")
 
-
+usuario_data = {}
 temp_data = {}
 global usuario_id
 
@@ -92,16 +92,32 @@ def obtener_nombre(message):
 #Funcion para obtener el apellido paterno
 def obtener_apellido_paterno(message):
     usuario_id = message.from_user.id
-    temp_data[usuario_id]['apellido_paterno'] = message.text
-    bot.reply_to(message, "Ingresa apellido materno")
-    bot.register_next_step_handler(message, obtener_apellido_materno)
+    apellido = message.text.strip()
+
+    # Validar formato del nombre
+    if not re.match(r"^[a-zA-ZáéíóúÁÉÍÓÚñÑ ]+$", apellido):
+        bot.reply_to(message, "El apellido solo puede contener letras y espacios. Intenta nuevamente.")
+        bot.reply_to(message, "Ingresa el apellido paterno del paciente")
+        bot.register_next_step_handler(message, obtener_apellido_paterno)
+    elif True:
+        temp_data[usuario_id]['apellido_paterno'] = message.text
+        bot.reply_to(message, "Ingresa apellido materno")
+        bot.register_next_step_handler(message, obtener_apellido_materno)
 
 #Funcion para obtener el apellido materno
 def obtener_apellido_materno(message):
     usuario_id = message.from_user.id
-    temp_data[usuario_id]['apellido_materno'] = message.text
-    bot.reply_to(message, "Ingresa la edad del paciente")
-    bot.register_next_step_handler(message, obtener_edad)
+    apellido = message.text.strip()
+
+    # Validar formato del nombre
+    if not re.match(r"^[a-zA-ZáéíóúÁÉÍÓÚñÑ ]+$", apellido):
+        bot.reply_to(message, "El apellido solo puede contener letras y espacios. Intenta nuevamente.")
+        bot.reply_to(message, "Ingresa el apellido paterno del paciente")
+        bot.register_next_step_handler(message, obtener_apellido_paterno)
+    elif True:
+        temp_data[usuario_id]['apellido_materno'] = message.text
+        bot.reply_to(message, "Ingresa la edad del paciente")
+        bot.register_next_step_handler(message, obtener_edad)
 
 #Funcion para obtener la edad
 def obtener_edad(message):
@@ -489,6 +505,144 @@ def buscar_seguimiento_opciones(call):
         # Solicitar la fecha al usuario
         bot.send_message(call.message.chat.id, "Ingrese folio de paciente.")
         bot.register_next_step_handler(call.message, solicitar_fecha_inicial)
+
+################## BUSCAR SEGUIMIENTO POR FOLIO  ##################
+def procesar_busqueda_folio(message):
+    folio = message.text  # Aquí obtenemos el texto enviado por el usuario
+
+    if not folio:
+        bot.reply_to(message, "El folio no puede estar vacío. Intenta nuevamente.")
+        return
+    
+    # Conectar a la base de datos y buscar por folio
+    conn = sqlite3.connect('pacientes.db')
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute('SELECT * FROM seguimientos WHERE folio = ?', (folio,))
+        resultados = cursor.fetchall()
+    finally:
+        conn.close()
+
+    if not resultados:
+        bot.reply_to(message, f"No se encontraron resultados para el folio: {folio}")
+        return
+
+    # Crear un nuevo archivo Excel
+    workbook = openpyxl.Workbook()
+    hoja = workbook.active
+    hoja.title = "Seguimientos_folio"
+
+    # Escribir encabezados
+    encabezados = ['Indice', 'Folio', 'Fecha', 'Hora', 'Temperatura', 'Vomitos',
+                   'frecuencia_vomitos', 'problemas_respiracion', 'dolor_corporal',
+                   'zona_dolor', 'intensidad_dolor']
+    for col, encabezado in enumerate(encabezados, start=1):
+        hoja.cell(row=1, column=col).value = encabezado
+        hoja.cell(row=1, column=col).font = Font(bold=True)
+
+    # Escribir los datos en el archivo
+    for fila, datos in enumerate(resultados, start=2):
+        for col, valor in enumerate(datos, start=1):
+            hoja.cell(row=fila, column=col).value = valor
+
+    # Guardar el archivo temporalmente
+    archivo_excel = "reporte_seguimiento.xlsx"
+    workbook.save(archivo_excel)
+
+    # Enviar el archivo al usuario
+    with open(archivo_excel, 'rb') as file:
+        bot.send_document(message.chat.id, file)
+
+    # Eliminar el archivo después de enviarlo
+    os.remove(archivo_excel)
+
+################## BUSCAR SEGUIMIENTO POR FECHA  ##################
+def solicitar_fecha_inicial(message):
+    folio = message.text.strip()
+    if not folio:
+        bot.reply_to(message, "El folio no puede estar vacío. Intenta nuevamente.")
+        return
+
+    usuario_data['folio'] = folio  # Guardamos el folio en los datos del chat
+    print(usuario_data)
+    bot.send_message(message.chat.id, "Por favor, ingrese la **fecha inicial** (formato: YYYY-MM-DD):")
+    bot.register_next_step_handler(message, solicitar_fecha_final)
+
+def solicitar_fecha_final(message):
+    fecha_inicial = message.text.strip()
+    try:
+        # Validar la fecha inicial
+        datetime.strptime(fecha_inicial, "%Y-%m-%d")
+    except ValueError:
+        bot.reply_to(message, "Fecha inicial no válida. Intenta nuevamente (formato: YYYY-MM-DD).")
+        return
+    
+    usuario_data['fecha_inicial'] = fecha_inicial #Guardamos fecha inicial
+    bot.send_message(message.chat.id, "Por favor, ingrese la **fecha final** (formato: YYYY-MM-DD):")
+    bot.register_next_step_handler(message, procesar_busqueda_fecha)
+
+def procesar_busqueda_fecha(message):
+    fecha_final = message.text.strip()
+    usuario_data['fecha_final'] = fecha_final
+    try:
+        # Validar la fecha final
+        datetime.strptime(fecha_final, "%Y-%m-%d")
+    except ValueError:
+        bot.reply_to(message, "Fecha final no válida. Intenta nuevamente (formato: YYYY-MM-DD).")
+        return
+
+    # Recuperar datos almacenados
+    folio = usuario_data['folio']
+    fecha_inicial = usuario_data['fecha_inicial']
+    fecha_final = usuario_data['fecha_final']
+
+    # Conectar a la base de datos y buscar por rango de fechas
+    conn = sqlite3.connect('pacientes.db')
+    cursor = conn.cursor()
+
+    try:
+        query = '''
+        SELECT * FROM seguimientos 
+        WHERE folio = ? AND fecha BETWEEN ? AND ?
+        '''
+        cursor.execute(query, (folio, fecha_inicial, fecha_final))
+        resultados = cursor.fetchall()
+    finally:
+        conn.close()
+
+    if not resultados:
+        bot.reply_to(message, f"No se encontraron resultados para el folio '{folio}' entre {fecha_inicial} y {fecha_final}.")
+        return
+
+    # Crear un nuevo archivo Excel
+    workbook = openpyxl.Workbook()
+    hoja = workbook.active
+    hoja.title = "Seguimientos_fecha"
+
+    # Escribir encabezados
+    encabezados = ['Indice', 'Folio', 'Fecha', 'Hora', 'Temperatura', 'Vomitos',
+                   'frecuencia_vomitos', 'problemas_respiracion', 'dolor_corporal',
+                   'zona_dolor', 'intensidad_dolor']
+    for col, encabezado in enumerate(encabezados, start=1):
+        hoja.cell(row=1, column=col).value = encabezado
+        hoja.cell(row=1, column=col).font = Font(bold=True)
+
+    # Escribir los datos en el archivo
+    for fila, datos in enumerate(resultados, start=2):
+        for col, valor in enumerate(datos, start=1):
+            hoja.cell(row=fila, column=col).value = valor
+
+    # Guardar el archivo temporalmente
+    archivo_excel = "reporte_seguimiento_fecha.xlsx"
+    workbook.save(archivo_excel)
+
+    # Enviar el archivo al usuario
+    with open(archivo_excel, 'rb') as file:
+        bot.send_document(message.chat.id, file)
+
+    # Eliminar el archivo después de enviarlo
+    os.remove(archivo_excel)
 
 ################## FUNCIONES UTILES ##################
 #Verifica que un paciente se encuentre en la tabla pacientes
