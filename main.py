@@ -13,8 +13,8 @@ from pacientesBD import * #Importamos pacientes, donde se crea la base de datos
 #Instanciar el bot
 bot = telebot.TeleBot("7734067796:AAF_2wvdRTR9KQi6jYPOcf-PKyYfSx6eyGk")
 
-ALLOWED_USERS = [1130744210]
-usuario_data = {}
+ALLOWED_USERS = [1130744210, 1163297608]
+seguimiento_data = {}
 temp_data = {}
 global usuario_id
 
@@ -274,7 +274,6 @@ def validar_folio(message):
     else:
         bot.send_message(message.chat.id, "Paciente no encontrado. Por favor verifique el folio.")
 
-
 ################## INICIA SEGUIMIENTO ##################
 
 # Pregunta sobre la temperatura del paciente
@@ -463,7 +462,6 @@ def guardar_seguimiento(message):
         bot.send_message(message.chat.id, "Error: No se pudo identificar al usuario.")
         return
 
-
     # Verificar si el usuario_id existe en temp_data
     if usuario_id not in temp_data:
         bot.send_message(message.chat.id, "Ocurrió un error. No se encontraron los datos de seguimiento.")
@@ -615,8 +613,8 @@ def solicitar_fecha_inicial(message):
         bot.reply_to(message, "El folio no puede estar vacío. Intenta nuevamente.")
         return
 
-    usuario_data['folio'] = folio  # Guardamos el folio en los datos del chat
-    print(usuario_data)
+    seguimiento_data['folio'] = folio  # Guardamos el folio en los datos del chat
+    print(seguimiento_data)
     bot.send_message(message.chat.id, "Por favor, ingrese la **fecha inicial** (formato: YYYY-MM-DD):")
     bot.register_next_step_handler(message, solicitar_fecha_final)
 
@@ -629,13 +627,13 @@ def solicitar_fecha_final(message):
         bot.reply_to(message, "Fecha inicial no válida. Intenta nuevamente (formato: YYYY-MM-DD).")
         return
     
-    usuario_data['fecha_inicial'] = fecha_inicial #Guardamos fecha inicial
+    seguimiento_data['fecha_inicial'] = fecha_inicial #Guardamos fecha inicial
     bot.send_message(message.chat.id, "Por favor, ingrese la **fecha final** (formato: YYYY-MM-DD):")
     bot.register_next_step_handler(message, procesar_busqueda_fecha)
 
 def procesar_busqueda_fecha(message):
     fecha_final = message.text.strip()
-    usuario_data['fecha_final'] = fecha_final
+    seguimiento_data['fecha_final'] = fecha_final
     try:
         # Validar la fecha final
         datetime.strptime(fecha_final, "%Y-%m-%d")
@@ -644,9 +642,9 @@ def procesar_busqueda_fecha(message):
         return
 
     # Recuperar datos almacenados
-    folio = usuario_data['folio']
-    fecha_inicial = usuario_data['fecha_inicial']
-    fecha_final = usuario_data['fecha_final']
+    folio = seguimiento_data['folio']
+    fecha_inicial = seguimiento_data['fecha_inicial']
+    fecha_final = seguimiento_data['fecha_final']
 
     # Conectar a la base de datos y buscar por rango de fechas
     conn = sqlite3.connect('pacientes.db')
