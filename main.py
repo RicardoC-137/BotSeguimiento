@@ -13,21 +13,30 @@ from pacientesBD import * #Importamos pacientes, donde se crea la base de datos
 #Instanciar el bot
 bot = telebot.TeleBot("7734067796:AAF_2wvdRTR9KQi6jYPOcf-PKyYfSx6eyGk")
 
+ALLOWED_USERS = [1130744210]
 usuario_data = {}
 temp_data = {}
 global usuario_id
 
 ################## COMANDOS ##################
+@bot.message_handler(commands=["id"])
+def cmd_id(message):
+    print(message.from_user.id)
 
 #Responde a comando /start
 @bot.message_handler(commands= ["iniciar"])
 def cmd_start(message):
     #Dar bienvenida al usuario
-    bot.reply_to(message, "Hola! 1. Usa el comando /seguimiento para comenzar el seguimiento de tu paciente \n 2. Usa el comando /buscar_seguimiento para ver tus seguimientos")
+    bot.reply_to(message, "Hola! 1.\n Usa el comando /seguimiento para comenzar el seguimiento de tu paciente \n 2. Usa el comando /buscar_seguimiento para ver tus seguimientos")
 
 #Registrar Pacientes desde Admin, comando /registrar
 @bot.message_handler(commands=["registrar"])
 def cmd_registrar(message):
+
+    if message.from_user.id not in ALLOWED_USERS:
+     bot.reply_to(message, "No tienes permiso para usar este comando.")
+     return
+
     global usuario_id
     usuario_id = message.from_user.id
     temp_data[usuario_id] = {}
@@ -44,6 +53,10 @@ def cmd_seguimiento(message):
 #Buscar paciente, comando /buscar_paciente
 @bot.message_handler(commands=['buscar_paciente'])
 def cmd_buscar_paciente(message):
+    if message.from_user.id not in ALLOWED_USERS:
+     bot.reply_to(message, "No tienes permiso para usar este comando.")
+     return
+    
     bot.reply_to(message, "Ingresa el folio del paciente para buscarlo.")
     bot.register_next_step_handler(message, buscar_paciente)
 
@@ -51,6 +64,44 @@ def cmd_buscar_paciente(message):
 @bot.message_handler(commands=['buscar_seguimiento'])
 def cmd_buscar_seguimiento(message):
     buscar_seguimiento(message)
+
+#Exportar Seguimientos en excel
+@bot.message_handler(commands=['exportar'])
+def exportar_excel(message):
+    conn = sqlite3.connect('pacientes.db')
+    cursor = conn.cursor()
+
+    # Obtener todos los datos de la tabla
+    cursor.execute('SELECT * FROM seguimientos')
+    resultados = cursor.fetchall()
+    conn.close()
+
+    # Crear un nuevo archivo Excel
+    workbook = openpyxl.Workbook()
+    hoja = workbook.active
+    hoja.title = "Seguimientos"
+
+    # Escribir encabezados
+    encabezados = ['Indice','Folio', 'Fecha', 'Hora', 'Temperatura', 'Vomitos', 'frecuencia_vomitos', 'problemas_respiracion', 'dolor_corporal', 'zona_dolor', 'intensidad_dolor']  # Cabeceras
+    for col, encabezado in enumerate(encabezados, start=1):
+        hoja.cell(row=1, column=col).value = encabezado
+        hoja.cell(row=1, column=col).font = Font(bold=True)  # Encabezados en negrita
+
+    # Escribir los datos en el archivo
+    for fila, datos in enumerate(resultados, start=2):
+        for col, valor in enumerate(datos, start=1):
+            hoja.cell(row=fila, column=col).value = valor
+
+    # Guardar el archivo temporalmente
+    archivo_excel = "reporte_pacientes.xlsx"
+    workbook.save(archivo_excel)
+
+    # Enviar el archivo al usuario
+    with open(archivo_excel, 'rb') as file:
+        bot.send_document(message.chat.id, file)
+
+    # Eliminar el archivo después de enviarlo
+    os.remove(archivo_excel)
 
 ################## REGISTRO DE PACIENTES ##################
 
